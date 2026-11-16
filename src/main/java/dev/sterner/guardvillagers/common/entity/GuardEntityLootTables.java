@@ -1,20 +1,21 @@
 package dev.sterner.guardvillagers.common.entity;
 
 import dev.sterner.guardvillagers.GuardVillagers;
-import net.minecraft.loot.context.LootContextParameters;
-import net.minecraft.loot.context.LootContextType;
-import net.minecraft.loot.context.LootContextTypes;
-import net.minecraft.util.Identifier;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.storage.loot.LootTable;
 
 public class GuardEntityLootTables {
-    public static final LootContextType SLOT = LootContextTypes.register("slot", (builder) -> {
-        builder.allow(LootContextParameters.THIS_ENTITY);
-    });
 
-    public static final Identifier GUARD_MAIN_HAND = new Identifier(GuardVillagers.MODID, "entities/guard_main_hand");
-    public static final Identifier GUARD_OFF_HAND = new Identifier(GuardVillagers.MODID, "entities/guard_off_hand");
-    public static final Identifier GUARD_HELMET = new Identifier(GuardVillagers.MODID, "entities/guard_helmet");
-    public static final Identifier GUARD_CHEST = new Identifier(GuardVillagers.MODID, "entities/guard_chestplate");
-    public static final Identifier GUARD_LEGGINGS = new Identifier(GuardVillagers.MODID, "entities/guard_legs");
-    public static final Identifier GUARD_FEET = new Identifier(GuardVillagers.MODID, "entities/guard_feet");
+    public static final ResourceKey<LootTable> GUARD_MAIN_HAND = registerLootTable("entities/guard_main_hand");
+    public static final ResourceKey<LootTable> GUARD_OFF_HAND = registerLootTable("entities/guard_off_hand");
+    public static final ResourceKey<LootTable> GUARD_HELMET = registerLootTable("entities/guard_helmet");
+    public static final ResourceKey<LootTable> GUARD_CHEST = registerLootTable("entities/guard_chestplate");
+    public static final ResourceKey<LootTable> GUARD_LEGGINGS = registerLootTable("entities/guard_legs");
+    public static final ResourceKey<LootTable> GUARD_FEET = registerLootTable("entities/guard_feet");
+
+    public static ResourceKey<LootTable> registerLootTable(String id) {
+        return ResourceKey.create(Registries.LOOT_TABLE, Identifier.fromNamespaceAndPath(GuardVillagers.MODID, id));
+    }
 }

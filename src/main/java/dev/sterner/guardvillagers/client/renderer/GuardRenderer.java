@@ -1,107 +1,146 @@
 package dev.sterner.guardvillagers.client.renderer;
 
+import com.mojang.blaze3d.vertex.PoseStack;
 import dev.sterner.guardvillagers.GuardVillagers;
 import dev.sterner.guardvillagers.GuardVillagersClient;
 import dev.sterner.guardvillagers.GuardVillagersConfig;
-import dev.sterner.guardvillagers.client.model.GuardArmorModel;
-import dev.sterner.guardvillagers.client.model.GuardSteveModel;
-import dev.sterner.guardvillagers.client.model.GuardVillagerModel;
+import dev.sterner.guardvillagers.client.model.*;
 import dev.sterner.guardvillagers.common.entity.GuardEntity;
-import net.minecraft.client.render.VertexConsumerProvider;
-import net.minecraft.client.render.entity.BipedEntityRenderer;
-import net.minecraft.client.render.entity.EntityRendererFactory;
-import net.minecraft.client.render.entity.feature.ArmorFeatureRenderer;
-import net.minecraft.client.render.entity.model.BipedEntityModel;
-import net.minecraft.client.render.entity.model.EntityModelLayers;
-import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.item.CrossbowItem;
-import net.minecraft.item.ItemStack;
-import net.minecraft.util.Arm;
-import net.minecraft.util.Hand;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.UseAction;
+import net.minecraft.client.model.HumanoidModel;
+import net.minecraft.client.model.geom.ModelLayers;
+import net.minecraft.client.renderer.entity.ArmorModelSet;
+import net.minecraft.client.renderer.entity.EntityRendererProvider;
+import net.minecraft.client.renderer.entity.HumanoidMobRenderer;
+import net.minecraft.client.renderer.entity.layers.HumanoidArmorLayer;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.HumanoidArm;
+import net.minecraft.world.item.BowItem;
+import net.minecraft.world.item.CrossbowItem;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.ItemUseAnimation;
 import org.jetbrains.annotations.Nullable;
 
-public class GuardRenderer extends BipedEntityRenderer<GuardEntity, BipedEntityModel<GuardEntity>> {
+public class GuardRenderer extends HumanoidMobRenderer<GuardEntity, GuardBipedRenderState, HumanoidModel<GuardBipedRenderState>> {
 
-    private final BipedEntityModel<GuardEntity> steve;
-    private final BipedEntityModel<GuardEntity> normal = this.getModel();
+    private final HumanoidModel<GuardBipedRenderState> normal = this.getModel();
 
-    public GuardRenderer(EntityRendererFactory.Context context) {
-        super(context, new GuardVillagerModel(context.getPart(GuardVillagersClient.GUARD)), 0.5F);
-        this.steve = new GuardSteveModel(context.getPart(GuardVillagersClient.GUARD_STEVE));
+    public GuardRenderer(EntityRendererProvider.Context context) {
+        super(context, new GuardVillagerModel(context.bakeLayer(GuardVillagersClient.GUARD)), 0.5F);
+
+        HumanoidModel<GuardBipedRenderState> steve = new HumanoidModel(context.bakeLayer(ModelLayers.PLAYER));
         if (GuardVillagersConfig.useSteveModel)
             this.model = steve;
         else
             this.model = normal;
-        this.addFeature(new ArmorFeatureRenderer<>(this, !GuardVillagersConfig.useSteveModel ?
-                new GuardArmorModel(context.getPart(GuardVillagersClient.GUARD_ARMOR_INNER)) : new BipedEntityModel<>(context.getPart(EntityModelLayers.PLAYER_INNER_ARMOR)), !GuardVillagersConfig.useSteveModel ?
-                new GuardArmorModel(context.getPart(GuardVillagersClient.GUARD_ARMOR_OUTER)) : new BipedEntityModel<>(context.getPart(EntityModelLayers.PLAYER_OUTER_ARMOR)),
-                context.getModelManager()));
+
+        GuardArmorModel headOuter = new GuardArmorModel(context.bakeLayer(GuardVillagersClient.GUARD_ARMOR_OUTER_HEAD));
+        GuardArmorModel chestOuter = new GuardArmorModel(context.bakeLayer(GuardVillagersClient.GUARD_ARMOR_OUTER_CHEST));
+        GuardArmorModel feetOuter = new GuardArmorModel(context.bakeLayer(GuardVillagersClient.GUARD_ARMOR_OUTER_FEET));
+        GuardArmorModel legsInner = new GuardArmorModel(context.bakeLayer(GuardVillagersClient.GUARD_ARMOR_INNER_LEGS));
+        refreshVisibility(headOuter, EquipmentSlot.HEAD);
+        refreshVisibility(chestOuter, EquipmentSlot.CHEST);
+        refreshVisibility(legsInner, EquipmentSlot.LEGS);
+        refreshVisibility(feetOuter, EquipmentSlot.FEET);
+        ArmorModelSet<HumanoidModel<GuardBipedRenderState>> adult = new ArmorModelSet(headOuter, chestOuter, legsInner, feetOuter);
+        this.addLayer(new HumanoidArmorLayer(this, adult, adult, context.getEquipmentRenderer()));
+
+    }
+
+    private static void refreshVisibility(HumanoidModel<?> m, EquipmentSlot slot) {
+        m.head.visible = m.hat.visible = false;
+        m.body.visible = m.rightArm.visible = m.leftArm.visible = false;
+        m.rightLeg.visible = m.leftLeg.visible = false;
+        switch (slot) {
+            case HEAD:
+                m.head.visible = true;
+                m.hat.visible = true;
+                break;
+            case CHEST:
+                m.body.visible = true;
+                m.rightArm.visible = true;
+                m.leftArm.visible = true;
+                break;
+            case LEGS:
+            case FEET:
+                m.rightLeg.visible = true;
+                m.leftLeg.visible = true;
+        }
 
     }
 
     @Override
-    public void render(GuardEntity entityIn, float entityYaw, float partialTicks, MatrixStack matrixStackIn, VertexConsumerProvider bufferIn, int packedLightIn) {
-        this.setModelVisibilities(entityIn);
-        super.render(entityIn, entityYaw, partialTicks, matrixStackIn, bufferIn, packedLightIn);
+    public GuardBipedRenderState createRenderState() {
+        return new GuardBipedRenderState();
     }
 
-    private void setModelVisibilities(GuardEntity entityIn) {
-        BipedEntityModel<GuardEntity> guardmodel = this.getModel();
-        ItemStack itemstack = entityIn.getMainHandStack();
-        ItemStack itemstack1 = entityIn.getOffHandStack();
-        guardmodel.setVisible(true);
-        BipedEntityModel.ArmPose bipedmodel$armpose = this.getArmPose(entityIn, itemstack, itemstack1,
-                Hand.MAIN_HAND);
-        BipedEntityModel.ArmPose bipedmodel$armpose1 = this.getArmPose(entityIn, itemstack, itemstack1,
-                Hand.OFF_HAND);
-        guardmodel.sneaking = entityIn.isSneaking();
-        if (entityIn.getMainArm() == Arm.RIGHT) {
-            guardmodel.rightArmPose = bipedmodel$armpose;
-            guardmodel.leftArmPose = bipedmodel$armpose1;
+    @Override
+    public void extractRenderState(GuardEntity entity, GuardBipedRenderState state, float f) {
+        super.extractRenderState(entity, state, f);
+        state.guardVariant = entity.getGuardVariant();
+        state.isDiscrete = entity.isShiftKeyDown();
+        state.mainArm = entity.getMainArm();
+        state.mainHandStack = entity.getMainHandItem();
+        state.offHandStack = entity.getOffhandItem();
+        state.hasRangedWeapon = isRanged(state.mainHandStack) || isRanged(state.offHandStack);
+        HumanoidModel.ArmPose mainPose = this.getArmPose(entity, state.mainHandStack, state.offHandStack, InteractionHand.MAIN_HAND);
+        HumanoidModel.ArmPose offPose = this.getArmPose(entity, state.mainHandStack, state.offHandStack, InteractionHand.OFF_HAND);
+        if (state.mainArm == HumanoidArm.RIGHT) {
+            state.rightArmPose = mainPose;
+            state.leftArmPose = offPose;
         } else {
-            guardmodel.rightArmPose = bipedmodel$armpose1;
-            guardmodel.leftArmPose = bipedmodel$armpose;
+            state.rightArmPose = offPose;
+            state.leftArmPose = mainPose;
         }
     }
 
-    private BipedEntityModel.ArmPose getArmPose(GuardEntity entityIn, ItemStack itemStackMain, ItemStack itemStackOff, Hand handIn) {
-        BipedEntityModel.ArmPose bipedmodel$armpose = BipedEntityModel.ArmPose.EMPTY;
-        ItemStack itemstack = handIn == Hand.MAIN_HAND ? itemStackMain : itemStackOff;
+    private static boolean isRanged(ItemStack s) {
+        if (s != null && !s.isEmpty()) {
+            Item it = s.getItem();
+            return it instanceof BowItem || it instanceof CrossbowItem;
+        } else {
+            return false;
+        }
+    }
+
+    private HumanoidModel.ArmPose getArmPose(GuardEntity entityIn, ItemStack itemStackMain, ItemStack itemStackOff, InteractionHand handIn) {
+        HumanoidModel.ArmPose bipedmodel$armpose = HumanoidModel.ArmPose.EMPTY;
+        ItemStack itemstack = handIn == InteractionHand.MAIN_HAND ? itemStackMain : itemStackOff;
         if (!itemstack.isEmpty()) {
-            bipedmodel$armpose = BipedEntityModel.ArmPose.ITEM;
-            if (entityIn.getItemUseTimeLeft() > 0) {
-                UseAction useaction = itemstack.getUseAction();
+            bipedmodel$armpose = HumanoidModel.ArmPose.ITEM;
+            if (entityIn.getUseItemRemainingTicks() > 0) {
+                ItemUseAnimation useaction = itemstack.getUseAnimation();
                 switch (useaction) {
                     case BLOCK:
-                        bipedmodel$armpose = BipedEntityModel.ArmPose.BLOCK;
+                        bipedmodel$armpose = HumanoidModel.ArmPose.BLOCK;
                         break;
                     case BOW:
-                        bipedmodel$armpose = BipedEntityModel.ArmPose.BOW_AND_ARROW;
+                        bipedmodel$armpose = HumanoidModel.ArmPose.BOW_AND_ARROW;
                         break;
                     case SPEAR:
-                        bipedmodel$armpose = BipedEntityModel.ArmPose.THROW_SPEAR;
+                        bipedmodel$armpose = HumanoidModel.ArmPose.THROW_TRIDENT;
                         break;
                     case CROSSBOW:
-                        if (handIn == entityIn.getActiveHand()) {
-                            bipedmodel$armpose = BipedEntityModel.ArmPose.CROSSBOW_CHARGE;
+                        if (handIn == entityIn.getUsedItemHand()) {
+                            bipedmodel$armpose = HumanoidModel.ArmPose.CROSSBOW_CHARGE;
                         }
                         break;
                     default:
-                        bipedmodel$armpose = BipedEntityModel.ArmPose.EMPTY;
+                        bipedmodel$armpose = HumanoidModel.ArmPose.EMPTY;
                         break;
                 }
             } else {
                 boolean flag1 = itemStackMain.getItem() instanceof CrossbowItem;
                 boolean flag2 = itemStackOff.getItem() instanceof CrossbowItem;
-                if (flag1 && entityIn.isAttacking()) {
-                    bipedmodel$armpose = BipedEntityModel.ArmPose.CROSSBOW_HOLD;
+                if (flag1 && entityIn.isAggressive()) {
+                    bipedmodel$armpose = HumanoidModel.ArmPose.CROSSBOW_HOLD;
                 }
 
-                if (flag2 && itemStackMain.getItem().getUseAction(itemStackMain) == UseAction.NONE
-                        && entityIn.isAttacking()) {
-                    bipedmodel$armpose = BipedEntityModel.ArmPose.CROSSBOW_HOLD;
+                if (flag2 && itemStackMain.getItem().getUseAnimation(itemStackMain) == ItemUseAnimation.NONE
+                        && entityIn.isAggressive()) {
+                    bipedmodel$armpose = HumanoidModel.ArmPose.CROSSBOW_HOLD;
                 }
             }
         }
@@ -109,17 +148,16 @@ public class GuardRenderer extends BipedEntityRenderer<GuardEntity, BipedEntityM
     }
 
     @Override
-    protected void scale(GuardEntity entitylivingbaseIn, MatrixStack matrixStackIn, float partialTickTime) {
-        matrixStackIn.scale(0.9375F, 0.9375F, 0.9375F);
+    protected void scale(GuardBipedRenderState state, PoseStack matrices) {
+        matrices.scale(0.9375F, 0.9375F, 0.9375F);
     }
 
-    @Nullable
     @Override
-    public Identifier getTexture(GuardEntity entity) {
+    public Identifier getTextureLocation(GuardBipedRenderState state) {
         return !GuardVillagersConfig.useSteveModel
-                ? new Identifier(GuardVillagers.MODID,
-                "textures/entity/guard/guard_" + entity.getGuardVariant() + ".png")
-                : new Identifier(GuardVillagers.MODID,
-                "textures/entity/guard/guard_steve_" + entity.getGuardVariant() + ".png");
+                ? GuardVillagers.id(
+                "textures/entity/guard/guard_" + state.guardVariant + ".png")
+                : GuardVillagers.id(
+                "textures/entity/guard/guard_steve_" + state.guardVariant + ".png");
     }
 }

@@ -52,8 +52,6 @@ public class GuardVillagersConfig extends MidnightConfig {
     @Entry
     public static boolean witchesVillager = true;
     @Entry
-    public static boolean blackSmithHealing = true;
-    @Entry
     public static boolean convertVillagerIfHaveHotv = false;
     @Entry
     public static double guardVillagerHelpRange = 50;
@@ -63,4 +61,6 @@ public class GuardVillagersConfig extends MidnightConfig {
     public static boolean villagersRunFromPolarBears = true;
     @Entry
     public static boolean guardArrowsHurtVillagers = true;
+    @Entry
+    public static float spawnChancePerVillager = 0.5f;
 }

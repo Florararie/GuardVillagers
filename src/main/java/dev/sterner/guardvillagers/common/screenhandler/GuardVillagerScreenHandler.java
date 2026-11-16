@@ -1,187 +1,185 @@
 package dev.sterner.guardvillagers.common.screenhandler;
 
-import com.mojang.datafixers.util.Pair;
 import dev.sterner.guardvillagers.GuardVillagers;
 import dev.sterner.guardvillagers.common.entity.GuardEntity;
-import net.minecraft.entity.EquipmentSlot;
-import net.minecraft.entity.mob.MobEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.entity.player.PlayerInventory;
-import net.minecraft.inventory.Inventory;
-import net.minecraft.item.ItemStack;
-import net.minecraft.network.PacketByteBuf;
-import net.minecraft.screen.PlayerScreenHandler;
-import net.minecraft.screen.ScreenHandler;
-import net.minecraft.screen.slot.Slot;
-import net.minecraft.util.Identifier;
+import dev.sterner.guardvillagers.common.network.GuardData;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.Container;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.InventoryMenu;
+import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.item.ItemStack;
 
-public class GuardVillagerScreenHandler extends ScreenHandler {
+public class GuardVillagerScreenHandler extends AbstractContainerMenu {
 
-    private final PlayerEntity player;
+    private final Player player;
     public final GuardEntity guardEntity;
-    public final Inventory guardInventory;
+    public final Container guardInventory;
     private static final EquipmentSlot[] EQUIPMENT_SLOT_ORDER = new EquipmentSlot[]{EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
 
-    public GuardVillagerScreenHandler(int syncId, PlayerInventory playerInventory, PacketByteBuf buf) {
-        this(syncId, playerInventory, playerInventory.player.getWorld().getEntityById(buf.readVarInt()) instanceof GuardEntity guard ? guard : null);
+    public GuardVillagerScreenHandler(int syncId, Inventory playerInventory, GuardData buf) {
+        this(syncId, playerInventory, playerInventory.player.level().getEntity(buf.guardId()) instanceof GuardEntity guard ? guard : null);
     }
 
-    public GuardVillagerScreenHandler(int syncId, PlayerInventory playerInventory, GuardEntity guardEntity) {
+    public GuardVillagerScreenHandler(int syncId, Inventory playerInventory, GuardEntity guardEntity) {
         this(syncId, playerInventory, guardEntity.guardInventory, guardEntity);
     }
 
-    public GuardVillagerScreenHandler(int id, PlayerInventory playerInventory, Inventory inventory, GuardEntity guardEntity) {
+    public GuardVillagerScreenHandler(int id, Inventory playerInventory, Container inventory, GuardEntity guardEntity) {
         super(GuardVillagers.GUARD_SCREEN_HANDLER, id);
         this.guardInventory = inventory;
         this.player = playerInventory.player;
         this.guardEntity = guardEntity;
-        inventory.onOpen(playerInventory.player);
+        inventory.startOpen(playerInventory.player);
         this.addSlot(new Slot(guardInventory, 0, 8, 9) {
             @Override
-            public boolean canInsert(ItemStack stack) {
-                return EQUIPMENT_SLOT_ORDER[0] == MobEntity.getPreferredEquipmentSlot(stack) && GuardVillagers.hotvChecker(player, guardEntity);
+            public boolean mayPlace(ItemStack stack) {
+                return EQUIPMENT_SLOT_ORDER[0] == guardEntity.getEquipmentSlotForItem(stack) && GuardVillagers.hotvChecker(player, guardEntity);
             }
 
             @Override
-            public int getMaxItemCount() {
+            public int getMaxStackSize() {
                 return 1;
             }
 
             @Override
-            public void setStack(ItemStack stack) {
-                super.setStack(stack);
-                guardEntity.equipStack(EquipmentSlot.HEAD, stack);
+            public void setByPlayer(ItemStack stack) {
+                super.setByPlayer(stack);
+                guardEntity.setItemSlot(EquipmentSlot.HEAD, stack);
             }
 
             @Override
-            public boolean canTakeItems(PlayerEntity playerIn) {
+            public boolean mayPickup(Player playerIn) {
                 return GuardVillagers.hotvChecker(playerInventory.player, guardEntity);
             }
 
             @Override
-            public Pair<Identifier, Identifier> getBackgroundSprite() {
-                return Pair.of(PlayerScreenHandler.BLOCK_ATLAS_TEXTURE, PlayerScreenHandler.EMPTY_HELMET_SLOT_TEXTURE);
+            public Identifier getNoItemIcon() {
+                return InventoryMenu.EMPTY_ARMOR_SLOT_HELMET;
             }
         });
         this.addSlot(new Slot(guardInventory, 1, 8, 26) {
             @Override
-            public boolean canInsert(ItemStack stack) {
-                return EQUIPMENT_SLOT_ORDER[1] == MobEntity.getPreferredEquipmentSlot(stack) && GuardVillagers.hotvChecker(player, guardEntity);
+            public boolean mayPlace(ItemStack stack) {
+                return EQUIPMENT_SLOT_ORDER[1] == guardEntity.getEquipmentSlotForItem(stack) && GuardVillagers.hotvChecker(player, guardEntity);
             }
 
             @Override
-            public int getMaxItemCount() {
+            public int getMaxStackSize() {
                 return 1;
             }
 
             @Override
-            public void setStack(ItemStack stack) {
-                super.setStack(stack);
-                guardEntity.equipStack(EquipmentSlot.CHEST, stack);
+            public void setByPlayer(ItemStack stack) {
+                super.setByPlayer(stack);
+                guardEntity.setItemSlot(EquipmentSlot.CHEST, stack);
             }
 
             @Override
-            public boolean canTakeItems(PlayerEntity playerIn) {
+            public boolean mayPickup(Player playerIn) {
                 return GuardVillagers.hotvChecker(playerInventory.player, guardEntity);
             }
 
             @Override
-            public Pair<Identifier, Identifier> getBackgroundSprite() {
-                return Pair.of(PlayerScreenHandler.BLOCK_ATLAS_TEXTURE, PlayerScreenHandler.EMPTY_CHESTPLATE_SLOT_TEXTURE);
+            public Identifier getNoItemIcon() {
+                return InventoryMenu.EMPTY_ARMOR_SLOT_CHESTPLATE;
             }
         });
         this.addSlot(new Slot(guardInventory, 2, 8, 44) {
             @Override
-            public boolean canInsert(ItemStack stack) {
-                return EQUIPMENT_SLOT_ORDER[2] == MobEntity.getPreferredEquipmentSlot(stack) && GuardVillagers.hotvChecker(player, guardEntity);
+            public boolean mayPlace(ItemStack stack) {
+                return EQUIPMENT_SLOT_ORDER[2] == guardEntity.getEquipmentSlotForItem(stack) && GuardVillagers.hotvChecker(player, guardEntity);
             }
 
             @Override
-            public int getMaxItemCount() {
+            public int getMaxStackSize() {
                 return 1;
             }
 
             @Override
-            public void setStack(ItemStack stack) {
-                super.setStack(stack);
-                guardEntity.equipStack(EquipmentSlot.LEGS, stack);
+            public void setByPlayer(ItemStack stack) {
+                super.setByPlayer(stack);
+                guardEntity.setItemSlot(EquipmentSlot.LEGS, stack);
             }
 
             @Override
-            public boolean canTakeItems(PlayerEntity playerIn) {
+            public boolean mayPickup(Player playerIn) {
                 return GuardVillagers.hotvChecker(playerInventory.player, guardEntity);
             }
 
             @Override
-            public Pair<Identifier, Identifier> getBackgroundSprite() {
-                return Pair.of(PlayerScreenHandler.BLOCK_ATLAS_TEXTURE, PlayerScreenHandler.EMPTY_LEGGINGS_SLOT_TEXTURE);
+            public Identifier getNoItemIcon() {
+                return InventoryMenu.EMPTY_ARMOR_SLOT_LEGGINGS;
             }
         });
         this.addSlot(new Slot(guardInventory, 3, 8, 62) {
             @Override
-            public boolean canInsert(ItemStack stack) {
-                return EQUIPMENT_SLOT_ORDER[3] == MobEntity.getPreferredEquipmentSlot(stack) && GuardVillagers.hotvChecker(playerInventory.player, guardEntity);
+            public boolean mayPlace(ItemStack stack) {
+                return EQUIPMENT_SLOT_ORDER[3] == guardEntity.getEquipmentSlotForItem(stack) && GuardVillagers.hotvChecker(playerInventory.player, guardEntity);
             }
 
             @Override
-            public int getMaxItemCount() {
+            public int getMaxStackSize() {
                 return 1;
             }
 
             @Override
-            public void setStack(ItemStack stack) {
-                super.setStack(stack);
-                guardEntity.equipStack(EquipmentSlot.FEET, stack);
+            public void setByPlayer(ItemStack stack) {
+                super.setByPlayer(stack);
+                guardEntity.setItemSlot(EquipmentSlot.FEET, stack);
             }
 
             @Override
-            public boolean canTakeItems(PlayerEntity playerIn) {
+            public boolean mayPickup(Player playerIn) {
                 return GuardVillagers.hotvChecker(playerInventory.player, guardEntity);
             }
 
             @Override
-            public Pair<Identifier, Identifier> getBackgroundSprite() {
-                return Pair.of(PlayerScreenHandler.BLOCK_ATLAS_TEXTURE, PlayerScreenHandler.EMPTY_BOOTS_SLOT_TEXTURE);
+            public Identifier getNoItemIcon() {
+                return InventoryMenu.EMPTY_ARMOR_SLOT_BOOTS;
             }
         });
         this.addSlot(new Slot(guardInventory, 4, 77, 62) {
             @Override
-            public boolean canInsert(ItemStack stack) {
+            public boolean mayPlace(ItemStack stack) {
                 return GuardVillagers.hotvChecker(playerInventory.player, guardEntity);
             }
 
             @Override
-            public void setStack(ItemStack stack) {
-                super.setStack(stack);
-                guardEntity.equipStack(EquipmentSlot.OFFHAND, stack);
+            public void setByPlayer(ItemStack stack) {
+                super.setByPlayer(stack);
+                guardEntity.setItemSlot(EquipmentSlot.OFFHAND, stack);
             }
 
             @Override
-            public boolean canTakeItems(PlayerEntity playerIn) {
+            public boolean mayPickup(Player playerIn) {
                 return GuardVillagers.hotvChecker(playerInventory.player, guardEntity);
             }
 
             @Override
-            public Pair<Identifier, Identifier> getBackgroundSprite() {
-                return Pair.of(PlayerScreenHandler.BLOCK_ATLAS_TEXTURE, PlayerScreenHandler.EMPTY_OFFHAND_ARMOR_SLOT);
+            public Identifier getNoItemIcon() {
+                return InventoryMenu.EMPTY_ARMOR_SLOT_SHIELD;
             }
         });
 
         this.addSlot(new Slot(guardInventory, 5, 77, 44) {
             @Override
-            public boolean canInsert(ItemStack stack) {
+            public boolean mayPlace(ItemStack stack) {
                 return GuardVillagers.hotvChecker(playerInventory.player, guardEntity);
             }
 
             @Override
-            public boolean canTakeItems(PlayerEntity playerIn) {
+            public boolean mayPickup(Player playerIn) {
                 return GuardVillagers.hotvChecker(playerIn, guardEntity);
             }
 
             @Override
-            public void setStack(ItemStack stack) {
-                super.setStack(stack);
-                guardEntity.equipStack(EquipmentSlot.MAINHAND, stack);
+            public void setByPlayer(ItemStack stack) {
+                super.setByPlayer(stack);
+                guardEntity.setItemSlot(EquipmentSlot.MAINHAND, stack);
             }
         });
         for (int l = 0; l < 3; ++l) {
@@ -196,37 +194,37 @@ public class GuardVillagerScreenHandler extends ScreenHandler {
     }
 
     @Override
-    public ItemStack quickMove(PlayerEntity player, int index) {
+    public ItemStack quickMoveStack(Player player, int index) {
         ItemStack itemstack = ItemStack.EMPTY;
         Slot slot = this.slots.get(index);
-        if (slot != null && slot.hasStack()) {
-            ItemStack itemstack1 = slot.getStack();
+        if (slot != null && slot.hasItem()) {
+            ItemStack itemstack1 = slot.getItem();
             itemstack = itemstack1.copy();
-            int i = this.guardInventory.size();
+            int i = this.guardInventory.getContainerSize();
             if (index < i) {
-                if (!this.insertItem(itemstack1, i, this.slots.size(), true)) {
+                if (!this.moveItemStackTo(itemstack1, i, this.slots.size(), true)) {
                     return ItemStack.EMPTY;
                 }
-            } else if (this.getSlot(1).canInsert(itemstack1) && !this.getSlot(1).hasStack()) {
-                if (!this.insertItem(itemstack1, 1, 2, false)) {
+            } else if (this.getSlot(1).mayPlace(itemstack1) && !this.getSlot(1).hasItem()) {
+                if (!this.moveItemStackTo(itemstack1, 1, 2, false)) {
                     return ItemStack.EMPTY;
                 }
-            } else if (this.getSlot(0).canInsert(itemstack1)) {
-                if (!this.insertItem(itemstack1, 0, 1, false)) {
+            } else if (this.getSlot(0).mayPlace(itemstack1)) {
+                if (!this.moveItemStackTo(itemstack1, 0, 1, false)) {
                     return ItemStack.EMPTY;
                 }
-            } else if (i <= 2 || !this.insertItem(itemstack1, 2, i, false)) {
+            } else if (i <= 2 || !this.moveItemStackTo(itemstack1, 2, i, false)) {
                 int j = i + 27;
                 int k = j + 9;
                 if (index >= j && index < k) {
-                    if (!this.insertItem(itemstack1, i, j, false)) {
+                    if (!this.moveItemStackTo(itemstack1, i, j, false)) {
                         return ItemStack.EMPTY;
                     }
                 } else if (index >= i && index < j) {
-                    if (!this.insertItem(itemstack1, j, k, false)) {
+                    if (!this.moveItemStackTo(itemstack1, j, k, false)) {
                         return ItemStack.EMPTY;
                     }
-                } else if (!this.insertItem(itemstack1, j, j, false)) {
+                } else if (!this.moveItemStackTo(itemstack1, j, j, false)) {
                     return ItemStack.EMPTY;
                 }
 
@@ -234,9 +232,9 @@ public class GuardVillagerScreenHandler extends ScreenHandler {
             }
 
             if (itemstack1.isEmpty()) {
-                slot.setStack(ItemStack.EMPTY);
+                slot.setByPlayer(ItemStack.EMPTY);
             } else {
-                slot.markDirty();
+                slot.setChanged();
             }
         }
 
@@ -244,14 +242,14 @@ public class GuardVillagerScreenHandler extends ScreenHandler {
     }
 
     @Override
-    public boolean canUse(PlayerEntity player) {
-        return this.guardInventory.canPlayerUse(player) && this.guardEntity.isAlive() && this.guardEntity.distanceTo(player) < 8.0F;
+    public boolean stillValid(Player player) {
+        return this.guardInventory.stillValid(player) && this.guardEntity.isAlive() && this.guardEntity.distanceTo(player) < 8.0F;
     }
 
     @Override
-    public void onClosed(PlayerEntity player) {
-        super.onClosed(player);
-        this.guardInventory.onClose(player);
+    public void removed(Player player) {
+        super.removed(player);
+        this.guardInventory.stopOpen(player);
         this.guardEntity.interacting = false;
     }
 }

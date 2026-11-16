@@ -2,47 +2,35 @@ package dev.sterner.guardvillagers.common.network;
 
 import dev.sterner.guardvillagers.GuardVillagers;
 import dev.sterner.guardvillagers.common.entity.GuardEntity;
-import net.fabricmc.fabric.api.networking.v1.FabricPacket;
-import net.fabricmc.fabric.api.networking.v1.PacketSender;
-import net.fabricmc.fabric.api.networking.v1.PacketType;
-import net.minecraft.entity.Entity;
-import net.minecraft.network.PacketByteBuf;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.sound.SoundEvents;
-import net.minecraft.util.Identifier;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.Identifier;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.world.entity.Entity;
 
-public class GuardFollowPacket implements FabricPacket {
+public record GuardFollowPacket(int guardId) implements CustomPacketPayload {
+    public static final CustomPacketPayload.Type<GuardFollowPacket> ID = new CustomPacketPayload.Type<>(Identifier.fromNamespaceAndPath(GuardVillagers.MODID, "guard_follow"));
 
-    public static final PacketType<GuardFollowPacket> PACKET_TYPE = PacketType.create(new Identifier(GuardVillagers.MODID, "guard_follow"), GuardFollowPacket::read);
-    private final int id;
+    public static final StreamCodec<RegistryFriendlyByteBuf, GuardFollowPacket> PACKET_CODEC = StreamCodec.composite(
+            ByteBufCodecs.INT,
+            GuardFollowPacket::guardId,
+            GuardFollowPacket::new
+    );
 
-    public GuardFollowPacket(int id) {
-        this.id = id;
-    }
-
-    public static void handle(GuardFollowPacket guardFollowPacket, ServerPlayerEntity serverPlayerEntity, PacketSender packetSender) {
-        int entityId = guardFollowPacket.id;
-
-        Entity entity = serverPlayerEntity.getWorld().getEntityById(entityId);
+    public void handle(ServerPlayNetworking.Context context) {
+        Entity entity = context.player().level().getEntity(guardId);
         if (entity instanceof GuardEntity guardEntity) {
             guardEntity.setFollowing(!guardEntity.isFollowing());
-            guardEntity.setOwnerId(serverPlayerEntity.getUuid());
-            guardEntity.playSound(SoundEvents.ENTITY_VILLAGER_YES, 1, 1);
+            guardEntity.setOwnerId(context.player().getUUID());
+            guardEntity.playSound(SoundEvents.VILLAGER_YES, 1, 1);
         }
     }
 
-    public static GuardFollowPacket read(PacketByteBuf buf) {
-        int id = buf.readInt();
-        return new GuardFollowPacket(id);
-    }
-
     @Override
-    public void write(PacketByteBuf buf) {
-        buf.writeInt(id);
-    }
-
-    @Override
-    public PacketType<?> getType() {
-        return PACKET_TYPE;
+    public Type<? extends CustomPacketPayload> type() {
+        return ID;
     }
 }
