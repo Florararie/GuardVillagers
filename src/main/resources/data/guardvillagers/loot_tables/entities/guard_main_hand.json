@@ -11,6 +11,10 @@
         {
           "type": "minecraft:item",
           "name": "minecraft:crossbow"
+        },
+        {
+          "type": "minecraft:item",
+          "name": "minecraft:bow"
         }
       ]
     }

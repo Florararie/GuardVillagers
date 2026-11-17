@@ -85,6 +85,10 @@ public class GuardRenderer extends HumanoidMobRenderer<GuardEntity, GuardBipedRe
         state.mainHandStack = entity.getMainHandItem();
         state.offHandStack = entity.getOffhandItem();
         state.hasRangedWeapon = isRanged(state.mainHandStack) || isRanged(state.offHandStack);
+        // The leg kick in GuardVillagerModel/GuardSteveModel is driven by this counter, and the
+        // server starts it with entity event 4. Nothing was copying it into the render state,
+        // so the kick animation existed but could never play.
+        state.kickTicks = entity.getKickTicks();
         HumanoidModel.ArmPose mainPose = this.getArmPose(entity, state.mainHandStack, state.offHandStack, InteractionHand.MAIN_HAND);
         HumanoidModel.ArmPose offPose = this.getArmPose(entity, state.mainHandStack, state.offHandStack, InteractionHand.OFF_HAND);
         if (state.mainArm == HumanoidArm.RIGHT) {

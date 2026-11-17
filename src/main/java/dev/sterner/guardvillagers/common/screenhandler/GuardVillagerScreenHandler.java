@@ -2,7 +2,9 @@ package dev.sterner.guardvillagers.common.screenhandler;
 
 import dev.sterner.guardvillagers.GuardVillagers;
 import dev.sterner.guardvillagers.common.entity.GuardEntity;
+import dev.sterner.guardvillagers.common.entity.goal.GuardEatFoodGoal;
 import dev.sterner.guardvillagers.common.network.GuardData;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -12,6 +14,8 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.InventoryMenu;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.ProjectileWeaponItem;
 
 public class GuardVillagerScreenHandler extends AbstractContainerMenu {
 
@@ -145,7 +149,7 @@ public class GuardVillagerScreenHandler extends AbstractContainerMenu {
         this.addSlot(new Slot(guardInventory, 4, 77, 62) {
             @Override
             public boolean mayPlace(ItemStack stack) {
-                return GuardVillagers.hotvChecker(playerInventory.player, guardEntity);
+                return isOffhandItem(stack) && GuardVillagers.hotvChecker(playerInventory.player, guardEntity);
             }
 
             @Override
@@ -213,7 +217,18 @@ public class GuardVillagerScreenHandler extends AbstractContainerMenu {
                 if (!this.moveItemStackTo(itemstack1, 0, 1, false)) {
                     return ItemStack.EMPTY;
                 }
-            } else if (i <= 2 || !this.moveItemStackTo(itemstack1, 2, i, false)) {
+            } else if (isOffhandItem(itemstack1)) {
+                // Shield or food. Tested before the generic pass below, or a shield would be walked
+                // into the mainhand while the offhand it is meant to sit in stays empty.
+                if (!this.moveItemStackTo(itemstack1, 4, 5, false)) {
+                    return ItemStack.EMPTY;
+                }
+            } else if (isMainhandItem(itemstack1)) {
+                // A weapon is only a weapon in the mainhand: every combat goal reads that slot.
+                if (!this.moveItemStackTo(itemstack1, 5, 6, false)) {
+                    return ItemStack.EMPTY;
+                }
+            } else if (i <= 2 || !this.moveItemStackTo(itemstack1, 2, 4, false)) {
                 int j = i + 27;
                 int k = j + 9;
                 if (index >= j && index < k) {
@@ -239,6 +254,26 @@ public class GuardVillagerScreenHandler extends AbstractContainerMenu {
         }
 
         return itemstack;
+    }
+
+    /**
+     * The offhand is only worth occupying with something the guard actually reads out of it: a
+     * shield to raise, or food to eat. The ranged goals only ever look at the mainhand, so a
+     * crossbow parked in the offhand gets racked and then never fired.
+     */
+    public static boolean isOffhandItem(ItemStack stack) {
+        return stack.is(Items.SHIELD) || GuardEatFoodGoal.isConsumable(stack);
+    }
+
+    /**
+     * The mainhand is the slot every combat goal reads, so shift-clicked weapons belong there.
+     * Durable and not wearable covers swords, axes, tools, bows and crossbows, and leaves armour
+     * (and shields, which are wearable) to their own slots. Manually placing anything there is
+     * still allowed; this only decides where a shift-click lands.
+     */
+    public static boolean isMainhandItem(ItemStack stack) {
+        return stack.getItem() instanceof ProjectileWeaponItem
+                || (stack.isDamageableItem() && !stack.has(DataComponents.EQUIPPABLE));
     }
 
     @Override

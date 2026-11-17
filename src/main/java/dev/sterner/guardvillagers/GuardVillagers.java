@@ -152,7 +152,7 @@ public class GuardVillagers implements ModInitializer {
 
     private InteractionResult villagerConvert(Player player, Level world, InteractionHand hand, Entity entity, @Nullable EntityHitResult entityHitResult) {
         ItemStack itemStack = player.getItemInHand(hand);
-        if ((itemStack.is(ItemTags.SWORDS) || itemStack.getItem() instanceof CrossbowItem) && player.isShiftKeyDown()) {
+        if ((itemStack.is(ItemTags.SWORDS) || itemStack.getItem() instanceof CrossbowItem || itemStack.getItem() instanceof BowItem) && player.isShiftKeyDown()) {
             if (entityHitResult != null) {
                 Entity target = entityHitResult.getEntity();
                 if (target instanceof Villager villagerEntity) {

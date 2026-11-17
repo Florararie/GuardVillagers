@@ -25,6 +25,9 @@ public class RangedCrossbowAttackPassiveGoal<T extends PathfinderMob & RangedAtt
     private final T mob;
     private final double speedModifier;
     private final float attackRadiusSqr;
+    private static final double MIN_SHOOT_DISTANCE_SQR = 3.0D * 3.0D;
+    /** Reverse walk speed used while backing off. Magnitude matches vanilla's own back-off strafe. */
+    private static final float BACK_OFF_SPEED = -0.5F;
     protected double wantedX;
     protected double wantedY;
     protected double wantedZ;
@@ -52,7 +55,7 @@ public class RangedCrossbowAttackPassiveGoal<T extends PathfinderMob & RangedAtt
 
     @Override
     public boolean canContinueToUse() {
-        return this.isValidTarget() && (this.canUse() || !this.mob.getNavigation().isDone()) && this.isHoldingCrossbow();
+        return this.isValidTarget() && this.isHoldingCrossbow();
     }
 
     private boolean isValidTarget() {
@@ -63,7 +66,6 @@ public class RangedCrossbowAttackPassiveGoal<T extends PathfinderMob & RangedAtt
     public void stop() {
         super.stop();
         this.mob.setAggressive(false);
-        this.mob.setTarget(null);
         this.seeTime = 0;
         if (this.mob.isUsingItem()) {
             this.mob.releaseUsingItem();
@@ -84,6 +86,12 @@ public class RangedCrossbowAttackPassiveGoal<T extends PathfinderMob & RangedAtt
 
     @Override
     public void tick() {
+        // A guard carrying a shield goes behind it for a few ticks now and then. Freeze the crossbow
+        // cycle for those ticks rather than fighting over the use item: swapping the shield out
+        // mid-charge is what lets a guard fire a bolt it never finished loading.
+        if (this.mob instanceof GuardEntity guard && guard.shieldTicks > 0) {
+            return;
+        }
         LivingEntity livingentity = this.mob.getTarget();
         if (livingentity != null) {
             boolean canSee = this.mob.getSensing().hasLineOfSight(livingentity);
@@ -97,11 +105,6 @@ public class RangedCrossbowAttackPassiveGoal<T extends PathfinderMob & RangedAtt
                 --this.seeTime;
             }
             double d0 = this.mob.distanceToSqr(livingentity);
-            double d1 = livingentity.distanceTo(this.mob);
-            if (d1 <= 4.0D) {
-                this.mob.getMoveControl().strafe(this.mob.isUsingItem() ? -0.5F : -3.0F, 0.0F);
-                this.mob.lookAt(livingentity, 30.0F, 30.0F);
-            }
             if (this.mob.getRandom().nextInt(50) == 0) {
                 if (this.mob.hasPose(Pose.STANDING))
                     this.mob.setPose(Pose.CROUCHING);
@@ -109,7 +112,9 @@ public class RangedCrossbowAttackPassiveGoal<T extends PathfinderMob & RangedAtt
                     this.mob.setPose(Pose.STANDING);
             }
             boolean canSee2 = (d0 > (double) this.attackRadiusSqr || this.seeTime < 5) && this.attackDelay == 0;
-            if (canSee2) {
+            if (d0 < MIN_SHOOT_DISTANCE_SQR) {
+                this.backOff();
+            } else if (canSee2) {
                 --this.updatePathDelay;
                 if (this.updatePathDelay <= 0) {
                     this.mob.getNavigation().moveTo(livingentity, this.canRun() ? this.speedModifier : this.speedModifier * 0.5D);
@@ -118,6 +123,7 @@ public class RangedCrossbowAttackPassiveGoal<T extends PathfinderMob & RangedAtt
             } else {
                 this.updatePathDelay = 0;
                 this.mob.getNavigation().stop();
+                this.mob.getMoveControl().strafe(0.0F, 0.0F);
             }
             this.mob.lookAt(livingentity, 30.0F, 30.0F);
             this.mob.getLookControl().setLookAt(livingentity, 30.0F, 30.0F);
@@ -155,7 +161,7 @@ public class RangedCrossbowAttackPassiveGoal<T extends PathfinderMob & RangedAtt
             } else if (this.crossbowState == CrossbowState.READY_TO_ATTACK && canSee) {
                 this.mob.performRangedAttack(livingentity, 1.0F);
                 ItemStack itemstack1 = this.mob.getItemInHand(GuardVillagers.getHandWith(this.mob, item -> item instanceof CrossbowItem));
-                ((LivingEntity)this.mob).startUsingItem(ProjectileUtil.getWeaponHoldingHand(livingentity, Items.CROSSBOW));
+                ((LivingEntity)this.mob).startUsingItem(ProjectileUtil.getWeaponHoldingHand(this.mob, Items.CROSSBOW));
                 ((CrossbowAttackMob)this.mob).setChargingCrossbow(false);
                 this.crossbowState = CrossbowState.UNCHARGED;
             }
@@ -163,8 +169,21 @@ public class RangedCrossbowAttackPassiveGoal<T extends PathfinderMob & RangedAtt
 
     }
 
+    /**
+     * Walk straight backwards instead of pathing to a spot behind the guard. Navigation turns the
+     * body toward its next node, so a "get away from here" path read as the guard spinning on the
+     * spot, walking a couple of blocks and turning back around. Strafe mode drives the body in
+     * reverse whatever way the look control is facing, so the guard keeps facing the mob while it
+     * opens the gap. The crossbow is never released here, so a bolt already being loaded still fires.
+     */
+    private void backOff() {
+        this.updatePathDelay = 0;
+        this.mob.getNavigation().stop();
+        this.mob.getMoveControl().strafe(BACK_OFF_SPEED, 0.0F);
+    }
+
     private boolean friendlyInLineOfSight() {
-        List<Entity> list = this.mob.level().getEntities(this.mob, this.mob.getBoundingBox().inflate(5.0D));
+        List<Entity> list = this.mob.level().getEntities(this.mob, this.mob.getBoundingBox().inflate(3.0D));
         for (Entity guard : list) {
             if (guard != this.mob.getTarget()) {
                 boolean isVillager = ((GuardEntity) this.mob).getOwner() == guard || guard.getType() == EntityType.VILLAGER || guard.getType() == GuardVillagers.GUARD_VILLAGER || guard.getType() == EntityType.IRON_GOLEM;
@@ -172,7 +191,9 @@ public class RangedCrossbowAttackPassiveGoal<T extends PathfinderMob & RangedAtt
                     Vec3 vector3d = this.mob.getLookAngle();
                     Vec3 vector3d1 = guard.position().vectorTo(this.mob.position()).normalize();
                     vector3d1 = new Vec3(vector3d1.x, vector3d1.y, vector3d1.z);
-                    if (vector3d1.dot(vector3d) < 1.0D && this.mob.hasLineOfSight(guard) && guard.distanceTo(this.mob) <= 4.0D)
+                    // dot < 1.0 also matches allies standing behind the guard, which aborted shots
+                    // constantly in a village; only a friendly actually in front is in the way.
+                    if (vector3d1.dot(vector3d) > 0.0D && this.mob.hasLineOfSight(guard) && guard.distanceTo(this.mob) <= 3.0D)
                         return true;
                 }
             }

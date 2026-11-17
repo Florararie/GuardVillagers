@@ -124,6 +124,10 @@ public class GuardEntity extends PathfinderMob implements CrossbowAttackMob, Ran
     public int kickTicks;
     public int shieldCoolDown;
     public int kickCoolDown;
+    /** Ticks left in the current shield window; see RaiseShieldGoal. */
+    public int shieldTicks;
+    /** Ticks before the shield may go up again, so blocking never replaces attacking. */
+    public int shieldBlockCoolDown;
     public boolean interacting;
     public boolean spawnWithArmor;
     private int remainingPersistentAngerTime;
@@ -250,8 +254,10 @@ public class GuardEntity extends PathfinderMob implements CrossbowAttackMob, Ran
         this.setFollowing(nbt.getBooleanOr("Following", false));
         this.interacting = nbt.getBooleanOr("Interacting", false);
         this.setPatrolling(nbt.getBooleanOr("Patrolling", false));
-        this.shieldCoolDown = nbt.getIntOr("KickCooldown", 0);
-        this.kickCoolDown = nbt.getIntOr("ShieldCooldown", 0);
+        this.shieldCoolDown = nbt.getIntOr("ShieldCooldown", 0);
+        this.kickCoolDown = nbt.getIntOr("KickCooldown", 0);
+        this.shieldTicks = nbt.getIntOr("ShieldTicks", 0);
+        this.shieldBlockCoolDown = nbt.getIntOr("ShieldBlockCooldown", 0);
         this.lastGossipDecayTime = nbt.getLongOr("LastGossipDecay", 0);
         this.lastGossipTime = nbt.getLongOr("LastGossipTime", 0);
         this.spawnWithArmor = nbt.getBooleanOr("SpawnWithArmor", false);
@@ -322,7 +328,6 @@ public class GuardEntity extends PathfinderMob implements CrossbowAttackMob, Ran
                 this.releaseUsingItem();
             } else {
                 if (!this.useItem.isEmpty() && this.isUsingItem()) {
-                    this.level().levelEvent(2003, this.blockPosition(), Item.getId(this.useItem.getItem()));
                     ItemStack itemStack = this.useItem.finishUsingItem(this.level(), this);
                     if (itemStack != this.useItem) {
                         this.setItemInHand(hand, itemStack);
@@ -341,6 +346,8 @@ public class GuardEntity extends PathfinderMob implements CrossbowAttackMob, Ran
         nbt.putInt("Type", this.getGuardEntityVariant());
         nbt.putInt("KickTicks", this.kickTicks);
         nbt.putInt("ShieldCooldown", this.shieldCoolDown);
+        nbt.putInt("ShieldTicks", this.shieldTicks);
+        nbt.putInt("ShieldBlockCooldown", this.shieldBlockCoolDown);
         nbt.putInt("KickCooldown", this.kickCoolDown);
         nbt.putBoolean("Following", this.isFollowing());
         nbt.putBoolean("Interacting", this.interacting);
@@ -461,7 +468,10 @@ public class GuardEntity extends PathfinderMob implements CrossbowAttackMob, Ran
             this.lookAt(target, 90.0F, 90.0F);
         }
         ItemStack hand = this.getMainHandItem();
-        hand.hurtAndBreak(1, this, EquipmentSlot.MAINHAND);
+        // A kick is a boot, not a swing. Vanilla mobs never wear out the weapon they happen to be
+        // carrying, and a ranged guard kicks often enough to grind its only bow or crossbow away.
+        if (!(hand.getItem() instanceof ProjectileWeaponItem))
+            hand.hurtAndBreak(1, this, EquipmentSlot.MAINHAND);
         return super.doHurtTarget(world, target);
     }
 
@@ -505,6 +515,10 @@ public class GuardEntity extends PathfinderMob implements CrossbowAttackMob, Ran
             --this.kickCoolDown;
         if (this.shieldCoolDown > 0)
             --this.shieldCoolDown;
+        if (this.shieldTicks > 0)
+            --this.shieldTicks;
+        if (this.shieldBlockCoolDown > 0)
+            --this.shieldBlockCoolDown;
         if (this.getHealth() < this.getMaxHealth() && this.tickCount % 200 == 0) {
             this.heal(GuardVillagersConfig.amountOfHealthRegenerated);
         }
@@ -641,30 +655,7 @@ public class GuardEntity extends PathfinderMob implements CrossbowAttackMob, Ran
         this.goalSelector.addGoal(0, new RaiseShieldGoal(this));
         this.goalSelector.addGoal(1, new GuardRunToEatGoal(this));
         this.goalSelector.addGoal(2, new RangedCrossbowAttackPassiveGoal<>(this, 1.0D, 8.0F));
-        this.goalSelector.addGoal(3, new RangedBowAttackPassiveGoal<GuardEntity>(this, 0.5D, 20, 15.0F) {
-            @Override
-            public boolean canUse() {
-                return GuardEntity.this.getTarget() != null && this.isBowInMainhand() && !GuardEntity.this.isEating() && !GuardEntity.this.isBlocking();
-            }
-
-            protected boolean isBowInMainhand() {
-                return GuardEntity.this.getMainHandItem().getItem() instanceof BowItem;
-            }
-
-            @Override
-            public void tick() {
-                super.tick();
-                if (GuardEntity.this.isPatrolling()) {
-                    GuardEntity.this.getNavigation().stop();
-                    GuardEntity.this.getMoveControl().strafe(0.0F, 0.0F);
-                }
-            }
-
-            @Override
-            public boolean canContinueToUse() {
-                return (this.canUse() || !GuardEntity.this.getNavigation().isDone()) && this.isBowInMainhand();
-            }
-        });
+        this.goalSelector.addGoal(2, new RangedBowAttackPassiveGoal(this, 1.0D, 20, 15.0F));
         this.goalSelector.addGoal(2, new GuardEntityMeleeGoal(this, 0.8D, true));
         this.goalSelector.addGoal(3, new FollowHeroGoal(this));
         if (GuardVillagersConfig.guardEntitysRunFromPolarBears)
@@ -711,11 +702,20 @@ public class GuardEntity extends PathfinderMob implements CrossbowAttackMob, Ran
     @Override
     public void performRangedAttack(LivingEntity target, float pullProgress) {
         this.shieldCoolDown = 8;
-        if (this.getMainHandItem().getItem() instanceof CrossbowItem)
-            this.performCrossbowAttack(this, 6.0F);
+        if (this.getMainHandItem().getItem() instanceof CrossbowItem crossbow) {
+            // The same shot a pillager fires (performCrossbowAttack with 1.6F), minus the
+            // 14 - 4 * difficulty spread. The velocity must stay at the vanilla value: shootProjectile
+            // aims 0.2 blocks higher per block of distance to compensate for arrow drop, and a faster
+            // bolt does not drop that much, so a 6.0 bolt sailed 0.2 * distance blocks over the target.
+            InteractionHand hand = ProjectileUtil.getWeaponHoldingHand(this, Items.CROSSBOW);
+            crossbow.performShooting(this.level(), this, hand, this.getItemInHand(hand), 1.6F, 0.0F, target);
+            this.onCrossbowAttackPerformed();
+        }
         if (this.getMainHandItem().getItem() instanceof BowItem) {
             ItemStack itemStack = this.getProjectile(this.getItemInHand(ProjectileUtil.getWeaponHoldingHand(this, Items.BOW)));
-            ItemStack hand = this.getUseItem();
+            // Callers release the bow before shooting, so the stack has to come from the hand; the
+            // use item is empty by then and reading it drops every bow enchantment.
+            ItemStack hand = this.getItemInHand(ProjectileUtil.getWeaponHoldingHand(this, Items.BOW));
             ItemEnchantments itemEnchantmentsComponent = EnchantmentHelper.getEnchantmentsForCrafting(itemStack);
             AbstractArrow persistentProjectileEntity = ProjectileUtil.getMobArrow(this, itemStack, pullProgress, hand);
             HolderLookup.RegistryLookup<Enchantment> impl = this.registryAccess().lookupOrThrow(Registries.ENCHANTMENT);
@@ -739,7 +739,6 @@ public class GuardEntity extends PathfinderMob implements CrossbowAttackMob, Ran
             persistentProjectileEntity.shoot(d, e + g * 0.20000000298023224D, f, 1.6F, (float) (14 - this.level().getDifficulty().getId() * 4));
             this.playSound(SoundEvents.SKELETON_SHOOT, 1.0F, 1.0F / (this.getRandom().nextFloat() * 0.4F + 0.8F));
             this.level().addFreshEntity(persistentProjectileEntity);
-            hand.hurtAndBreak(1, this, EquipmentSlot.MAINHAND);
         }
     }
 
@@ -840,6 +839,12 @@ public class GuardEntity extends PathfinderMob implements CrossbowAttackMob, Ran
         if (this.isKicking()) {
             this.setKicking(false);
         }
+        // Vanilla answers a blocked hit by shoving the attacker half a block away. At arm's length
+        // that shove is the whole problem: the guard blocks, its own target is knocked out of reach,
+        // the guard raises the shield again, and no swing ever lands. Keep the shove for anything
+        // the guard still has to close on, skip it once the target is inside swinging distance.
+        if (this.distanceToSqr(defender) <= 9.0D)
+            return;
         super.blockedByItem(defender);
     }
 
@@ -1063,7 +1068,11 @@ public class GuardEntity extends PathfinderMob implements CrossbowAttackMob, Ran
 
         @Override
         public boolean canUse() {
-            return !(this.guard.getMainHandItem().getItem() instanceof CrossbowItem) && this.guard.getTarget() != null && !this.guard.isEating() && super.canUse();
+            // A guard with only a bow or crossbow has nothing worth swinging at point blank; it should
+            // keep shooting instead of walking into the mob and hitting it with the stock.
+            return !(this.guard.getMainHandItem().getItem() instanceof CrossbowItem)
+                    && !(this.guard.getMainHandItem().getItem() instanceof BowItem)
+                    && this.guard.getTarget() != null && !this.guard.isEating() && super.canUse();
         }
 
         @Override
@@ -1072,21 +1081,8 @@ public class GuardEntity extends PathfinderMob implements CrossbowAttackMob, Ran
         }
 
         @Override
-        public void tick() {
-            LivingEntity target = guard.getTarget();
-            if (target != null) {
-                if (target.distanceTo(guard) <= 3.0D && !guard.isBlocking()) {
-                    guard.getMoveControl().strafe(-2.0F, 0.0F);
-                    guard.lookAt(target, 30.0F, 30.0F);
-                }
-                if (this.path != null && target.distanceTo(guard) <= 2.0D) guard.getNavigation().stop();
-                super.tick();
-            }
-        }
-
-        @Override
         protected void checkAndPerformAttack(LivingEntity target) {
-            if (guard.isWithinMeleeAttackRange(target) && this.getTicksUntilNextAttack() <= 0) {
+            if (this.canPerformAttack(target)) {
                 this.resetAttackCooldown();
                 this.guard.releaseUsingItem();
                 if (guard.shieldCoolDown == 0) this.guard.shieldCoolDown = 8;
