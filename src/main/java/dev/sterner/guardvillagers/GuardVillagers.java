@@ -10,6 +10,7 @@ import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.creativetab.v1.CreativeModeTabEvents;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.event.player.UseEntityCallback;
 import net.fabricmc.fabric.api.menu.v1.ExtendedMenuType;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
@@ -22,6 +23,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.tags.ItemTags;
@@ -41,6 +43,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.EntityHitResult;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -64,6 +67,16 @@ public class GuardVillagers implements ModInitializer {
     public static SoundEvent GUARD_AMBIENT = SoundEvent.createVariableRangeEvent(id( "entity.guard.ambient"));
     public static SoundEvent GUARD_HURT = SoundEvent.createVariableRangeEvent(id( "entity.guard.hurt"));
     public static SoundEvent GUARD_DEATH = SoundEvent.createVariableRangeEvent(id("entity.guard.death"));
+
+    /**
+     * Guards waiting for the server tick, by level. The entity-load event fires from
+     * {@code onTrackingStart}, inside the iteration over a chunk's entities, so spawning there
+     * adds to the list being walked and throws a ConcurrentModificationException.
+     */
+    private record PendingGuard(ServerLevel level, GuardEntity guard) {
+    }
+
+    private static final List<PendingGuard> PENDING_GUARDS = new ArrayList<>();
 
     public static Identifier id(String name){
         return Identifier.fromNamespaceAndPath(MODID, name);
@@ -121,8 +134,20 @@ public class GuardVillagers implements ModInitializer {
                     guardEntity.setDropChance(EquipmentSlot.MAINHAND, 100.0F);
                     guardEntity.setDropChance(EquipmentSlot.OFFHAND, 100.0F);
 
-                    world.addFreshEntityWithPassengers(guardEntity);
+                    PENDING_GUARDS.add(new PendingGuard(world, guardEntity));
                 }
+            }
+        });
+
+        ServerTickEvents.END_SERVER_TICK.register(server -> {
+            if (PENDING_GUARDS.isEmpty()) {
+                return;
+            }
+
+            var pending = List.copyOf(PENDING_GUARDS);
+            PENDING_GUARDS.clear();
+            for (PendingGuard entry : pending) {
+                entry.level().addFreshEntityWithPassengers(entry.guard());
             }
         });
     }
